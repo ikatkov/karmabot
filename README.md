@@ -1,3 +1,5 @@
+⚠️ Karmabot is archived and will not receive any updates going forward
+
 # Karmabot for Slack
 
 This is an implementation of Karma in Python that should be fairly robust to handle a largerish deployment.
