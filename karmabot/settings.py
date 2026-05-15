@@ -34,10 +34,10 @@ FAKE_SLACK = os.environ.get('FAKE_SLACK', "False").lower() in ['true', '1', 't',
 SLACK_EVENTS_ENDPOINT = os.environ.get("SLACK_EVENTS_ENDPOINT", "/slack_events")
 
 # Number of "gifts" per hour (note: quantity in gifts is not considered)
-KARMA_RATE_LIMIT = os.environ.get('KARMA_RATE_LIMIT', 60)
+KARMA_RATE_LIMIT = int(os.environ.get('KARMA_RATE_LIMIT', 60))
 
 # Number of days karma is good for
-KARMA_TTL = os.environ.get('KARMA_TTL', 90)
+KARMA_TTL = int(os.environ.get('KARMA_TTL', 90))
 
 # Color to use for stuff
 KARMA_COLOR = os.environ.get('KARMA_COLOR', '#af8b2d')

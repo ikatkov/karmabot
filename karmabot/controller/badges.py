@@ -772,8 +772,8 @@ class BadgesController(object):
         workspace_id = command['team_id']
         collection = self.mongodb[workspace_id]
 
-        badge_info_count = collection.find({"type": "badge_info"}).count()
-        badge_count = collection.find({"type": "badge"}).count()
+        badge_info_count = collection.count_documents({"type": "badge_info"})
+        badge_count = collection.count_documents({"type": "badge"})
         top_badges = self.get_top_badges(command['team_id'], 5)
         message = {
             'response_type': 'ephemeral',

@@ -51,6 +51,9 @@ def _get_connection():
 
 
 def log_metrics(measurement, tags, field, value):
+    if not METRICS_HOST or not METRICS_PORT:
+        return
+
     json_body = {'points': [
         {
             'measurement': measurement,
