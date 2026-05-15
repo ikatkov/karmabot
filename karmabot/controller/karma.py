@@ -54,7 +54,7 @@ class KarmaController(object):
         return
 
     def ratelimit_count(self, workspace_id, gifter):
-        d = datetime.datetime.utcnow() + datetime.timedelta(hours=-1)
+        d = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(hours=-1)
         return self.store.count_recent_gifts(workspace_id, gifter, d)
 
     def handle_command(self, command):
@@ -137,7 +137,7 @@ class KarmaController(object):
         return self.cmd_karma_help(command)
 
     def store_karma(self, ktype, subject, quantity, gifter, workspace_id):
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         expires = now + datetime.timedelta(days=settings.KARMA_TTL)
         self.store.store_karma(workspace_id, ktype, subject, quantity, gifter, now, expires)
 

@@ -21,6 +21,7 @@ import time
 import re
 
 from flask import abort, current_app, g, jsonify, request, Blueprint
+from werkzeug.exceptions import HTTPException
 
 from karmabot.controller.karma import KarmaController
 from karmabot import executor
@@ -133,6 +134,9 @@ def slack_command():
 
 @slack.errorhandler(Exception)
 def generic_error(e):
+    if isinstance(e, HTTPException):
+        return e
+
     log_metrics('exceptions', {'name': e.__class__.__name__}, 'count', 1)
     current_app.logger.exception(f'An error occurred during a request via {e}')
     return 'An internal error occurred.', 500

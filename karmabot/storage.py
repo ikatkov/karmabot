@@ -25,6 +25,10 @@ def _to_db_datetime(value):
     return value.replace(microsecond=0).isoformat()
 
 
+def _utcnow():
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
 class KarmaStore(object):
     def __init__(self, path):
         self.path = Path(path)
@@ -63,7 +67,7 @@ class KarmaStore(object):
             )
 
     def cleanup_expired(self, workspace_id):
-        now = _to_db_datetime(datetime.datetime.utcnow())
+        now = _to_db_datetime(_utcnow())
         with self._connect() as conn:
             conn.execute(
                 "DELETE FROM karma_events WHERE workspace_id = ? AND expires_at <= ?",

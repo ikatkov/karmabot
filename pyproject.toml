@@ -28,6 +28,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pytest>=9.0.3",
     "radon>=6.0.1,<7",
     "ruff>=0.14.0,<0.15",
 ]
@@ -41,3 +42,11 @@ exclude = [".git"]
 
 [tool.ruff.lint]
 select = ["E9", "F63", "F7", "F82"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:werkzeug.*",
+    "ignore:ast\\.Str is deprecated.*:DeprecationWarning",
+    "ignore:Attribute s is deprecated.*:DeprecationWarning",
+]
