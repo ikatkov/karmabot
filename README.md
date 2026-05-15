@@ -86,7 +86,7 @@ This project uses `uv` for dependency management.
 
 ```
 uv sync
-uv run flake8 karmabot --count --select=E9,F63,F7,F82 --show-source --statistics
+uv run ruff check karmabot
 uv run radon cc karmabot -a -nc
 ```
 
