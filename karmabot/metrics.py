@@ -13,15 +13,36 @@
 # limitations under the License.
 
 from functools import wraps
-from urllib.parse import urlparse
-from influxdb.line_protocol import make_lines
-import time
-import socket
 import os
+import time
 
-METRICS_URI = os.environ.get('METRICS_URI', 'tcp://localhost:8094')
-METRICS_HOST = urlparse(METRICS_URI).hostname
-METRICS_PORT = urlparse(METRICS_URI).port
+from opentelemetry import metrics
+
+
+def _configure_meter_provider():
+    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        return
+
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk.resources import Resource
+
+    service_name = os.environ.get("OTEL_SERVICE_NAME", "karmabot")
+    exporter = OTLPMetricExporter()
+    reader = PeriodicExportingMetricReader(exporter)
+    provider = MeterProvider(
+        metric_readers=[reader],
+        resource=Resource.create({"service.name": service_name}),
+    )
+    metrics.set_meter_provider(provider)
+
+
+_configure_meter_provider()
+_meter = metrics.get_meter("karmabot")
+_counters = {}
+_histograms = {}
 
 
 class timeit(object):
@@ -44,26 +65,27 @@ class timeit(object):
         return timed
 
 
-def _get_connection():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((METRICS_HOST, METRICS_PORT))
-    return s
+def _attributes(tags):
+    return tags or {}
+
+
+def _counter(name):
+    if name not in _counters:
+        _counters[name] = _meter.create_counter(name, unit="1")
+    return _counters[name]
+
+
+def _histogram(name, unit):
+    if name not in _histograms:
+        _histograms[name] = _meter.create_histogram(name, unit=unit)
+    return _histograms[name]
 
 
 def log_metrics(measurement, tags, field, value):
-    if not METRICS_HOST or not METRICS_PORT:
+    if field == "count" and measurement != "threads":
+        _counter(measurement).add(value, attributes=_attributes(tags))
         return
 
-    json_body = {'points': [
-        {
-            'measurement': measurement,
-            'tags': tags,
-            'fields': {
-                field: value
-            }
-        }
-    ]}
-    output = make_lines(json_body, None)
-    s = _get_connection()
-    s.send(output.encode())
-    s.close()
+    metric_name = measurement if field == "time_elapsed" else f"{measurement}.{field}"
+    unit = "ms" if field == "time_elapsed" else "1"
+    _histogram(metric_name, unit).record(value, attributes=_attributes(tags))

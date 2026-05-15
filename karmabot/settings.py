@@ -29,7 +29,7 @@ if USE_VAULT:
 
 VERIFICATION_TOKEN = os.environ.get('VERIFICATION_TOKEN', '')
 
-MONGODB = os.environ.get('MONGODB', 'mongodb://localhost:27017')
+SQLITE_PATH = os.environ.get('SQLITE_PATH', 'data/karmabot.db')
 FAKE_SLACK = os.environ.get('FAKE_SLACK', "False").lower() in ['true', '1', 't', 'y', 'yes']
 SLACK_EVENTS_ENDPOINT = os.environ.get("SLACK_EVENTS_ENDPOINT", "/slack_events")
 
@@ -71,7 +71,7 @@ def _env_get_bot_token(workspace):
 _access_token_cache = {}
 _bot_token_cache = {}
 _vault = None
-_TTL = os.environ.get('VAULT_CACHE_TTL', 300)  # Measured in seconds
+_TTL = int(os.environ.get('VAULT_CACHE_TTL', 300))  # Measured in seconds
 
 
 def _vault_get_access_token(workspace):

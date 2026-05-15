@@ -5,3 +5,4 @@ kubernetes/secrets.yml
 venv
 .venv
 .env
+data/

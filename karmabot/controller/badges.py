@@ -17,13 +17,13 @@ from flask import current_app
 from karmabot import regex
 from karmabot import settings
 from karmabot.service import slack as slack_client
-from pymongo import MongoClient
+from karmabot.storage import get_store
 
 
 class BadgesController(object):
 
     def __init__(self):
-        self.mongodb = MongoClient(current_app.config.get('MONGODB'))['karmabot']
+        self.store = get_store(current_app.config.get('SQLITE_PATH'))
 
     def handle_command(self, command):
         if not command['text']:
@@ -51,44 +51,16 @@ class BadgesController(object):
         return self.cmd_badge_help(command)
 
     def get_badges(self, workspace_id, subject):
-        collection = self.mongodb[workspace_id]
-        results = collection.find({"type": "badge", "subject": subject})
-
-        badges = []
-        for r in results:
-            badges.append(r['badge'])
-
-        return badges
+        return self.store.get_badges(workspace_id, subject)
 
     def get_badge_users(self, workspace_id, badge):
-        collection = self.mongodb[workspace_id]
-        results = collection.find({"type": "badge", "badge": badge})
-
-        users = []
-        for r in results:
-            users.append(r['subject'])
-
-        return users
+        return self.store.get_badge_users(workspace_id, badge)
 
     def delete_badge(self, workspace_id, badge):
-        collection = self.mongodb[workspace_id]
-        collection.delete_many({
-            'type': 'badge',
-            'badge': badge
-        })
-        collection.delete_many({
-            'type': 'badge_info',
-            'badge': badge
-        })
+        self.store.delete_badge(workspace_id, badge)
 
     def get_badge_info(self, workspace_id, badge):
-        collection = self.mongodb[workspace_id]
-        results = collection.find({"type": "badge_info", "badge": badge})
-
-        for r in results:
-            return r
-
-        return None
+        return self.store.get_badge_info(workspace_id, badge)
 
     def can_badge(self, workspace_id, user_id, badge):
         badge = self.get_badge_info(workspace_id, badge)
@@ -111,23 +83,10 @@ class BadgesController(object):
 
     def store_badge(self, workspace_id, subject, gifter, badge):
         now = datetime.datetime.utcnow()
-        data = {
-            'type': 'badge',
-            'subject': subject,
-            'badge': badge,
-            'gifter': gifter,
-            'date': now
-        }
-        collection = self.mongodb[workspace_id]
-        collection.insert_one(data)
+        self.store.store_badge(workspace_id, subject, gifter, badge, now)
 
     def remove_badge(self, workspace_id, subject, badge):
-        collection = self.mongodb[workspace_id]
-        collection.delete_many({
-            'type': 'badge',
-            'badge': badge,
-            'subject': subject
-        })
+        self.store.remove_badge(workspace_id, subject, badge)
 
     @staticmethod
     def cmd_badge_help(command):
@@ -286,16 +245,14 @@ class BadgesController(object):
             return
 
         now = datetime.datetime.utcnow()
-        data = {
-            'type': 'badge_info',
-            'badge': data['badge'],
-            'owner': owner,
-            'owner_display': data['owner'],
-            'description': data['description'],
-            'date': now
-        }
-        collection = self.mongodb[interaction['team']['id']]
-        collection.insert_one(data)
+        self.store.store_badge_info(
+            workspace_id=interaction['team']['id'],
+            badge=data['badge'],
+            owner=owner,
+            owner_display=data['owner'],
+            description=data['description'],
+            created_at=now,
+        )
 
         current_app.logger.debug("data[owner] '{owner}'")
         owner_escaped = f"<!subteam^{owner}>"
@@ -590,16 +547,14 @@ class BadgesController(object):
             return
 
         now = datetime.datetime.utcnow()
-        data = {
-            'type': 'badge_info',
-            'badge': badge,
-            'owner': owner,
-            'owner_display': data['owner'],
-            'description': data['description'],
-            'date': now
-        }
-        collection = self.mongodb[interaction['team']['id']]
-        collection.replace_one({'type': 'badge_info', 'badge': badge}, data)
+        self.store.replace_badge_info(
+            workspace_id=interaction['team']['id'],
+            badge=badge,
+            owner=owner,
+            owner_display=data['owner'],
+            description=data['description'],
+            created_at=now,
+        )
 
         owner_escaped = f"<!subgroup^{owner}>"
         if owner[0] != "S":
@@ -646,12 +601,7 @@ class BadgesController(object):
         slack_client.command_reply(interaction['team']['id'], interaction['response_url'], message)
 
     def cmd_badge_list(self, command):
-        collection = self.mongodb[command['team_id']]
-        results = collection.find({"type": "badge_info"})
-
-        badges = []
-        for r in results:
-            badges.append(r['badge'])
+        badges = self.store.list_badges(command['team_id'])
 
         message = {
             'response_type': 'ephemeral',
@@ -754,26 +704,16 @@ class BadgesController(object):
         return
 
     def get_top_badges(self, workspace_id, limit):
-        collection = self.mongodb[workspace_id]
-
-        pipeline = [
-            {"$match": {"type": "badge"}},
-            {"$group": {"_id": "$badge", "count": {"$sum": 1}}},
-            {"$sort": {"total": -1}},
-            {"$limit": limit}
-        ]
-        r = collection.aggregate(pipeline)
         msg = ""
-        for entry in r:
-            msg = f'{msg}\n{entry["_id"]}  {entry["count"]}'
+        for entry in self.store.get_top_badges(workspace_id, limit):
+            msg = f'{msg}\n{entry["badge"]}  {entry["count"]}'
         return msg
 
     def cmd_badge_stats(self, command):
         workspace_id = command['team_id']
-        collection = self.mongodb[workspace_id]
 
-        badge_info_count = collection.count_documents({"type": "badge_info"})
-        badge_count = collection.count_documents({"type": "badge"})
+        badge_info_count = self.store.count_badge_info(workspace_id)
+        badge_count = self.store.count_badges(workspace_id)
         top_badges = self.get_top_badges(command['team_id'], 5)
         message = {
             'response_type': 'ephemeral',

@@ -27,39 +27,38 @@ The idea is badges should be special, unique, and convey some meaning. For now, 
 
 ## Architecture
 
-This implementation uses Flask and MongoDB.
+This implementation uses Flask and SQLite.
 
 
-The Flask web service listens for the events from Slack and executes them in a separate thread using `flask-executor`. MongoDB is used to store the Karma operations.
+The Flask web service listens for the events from Slack and executes them in a separate thread using `flask-executor`. SQLite is used to store the Karma operations and badges.
 
-### MongoDB
+### SQLite
 
-Karma operations are stored as documents in the collection named after the Workspace ID (aka `team_id`).  The documents look like:
+Karma operations are stored in the `karma_events` table.  Each row includes:
 
 ```
 {
-    "_id" : ObjectId("5a9c5da940ea97000f9cf8dc"),
-    "expires" : ISODate("2018-06-02T20:57:13.280Z"),
-    "date" : ISODate("2018-03-04T20:57:13.280Z"),
+    "workspace_id" : "T12345678",
+    "expires_at" : "2018-06-02T20:57:13",
+    "created_at" : "2018-03-04T20:57:13",
     "subject" : "foo",
-    "type" : "thing",
+    "subject_type" : "thing",
     "gifter" : "U12345678,
     "quantity" : 1
 }
 ```
 
-For the `type`, it can be one of `thing`, `user`, `channel`, or `group`. Users, Channels, and Groups should be stored by their ID, not the display name, to support name changes without loosing Karma.
+For the `subject_type`, it can be one of `thing`, `user`, `channel`, or `group`. Users, Channels, and Groups should be stored by their ID, not the display name, to support name changes without loosing Karma.
 
-The MongoDB service should be set up initially with indexes to improve performance, and expire old Karma.
+SQLite does not have MongoDB-style TTL indexes. Karmabot removes expired karma rows before reads and writes.
 
-```
-db.WKSPCID.createIndex( { "expires": 1 }, { expireAfterSeconds: 0 } )
-```
+### Observability
+
+Karmabot emits metrics through OpenTelemetry when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. The app is vendor-neutral; point the endpoint at any OTLP-compatible collector or leave it unset to disable metric export.
 
 ## Setup
 
-* Set up MongoDB somewhere, should be persistent if you don't want to loose your Karma
-* Set up a Metrics service, something that accepts InfluxDB line protocol over a TCP port.  See the `docker-compose.yml` for an example of a Telegraph instance that does this. 
+* Choose a persistent location for the SQLite database if you don't want to loose your Karma
 * Create the app entry in `api.slack.com/apps`.
   * Create `/karma` command pointed to the proper HTTP endpoint for commands
     * Make sure to select "Escape channels, users, and links"
@@ -94,7 +93,9 @@ uv run radon cc karmabot -a -nc
 
 As mentioned, configuration is handled via environment variables.  Here is the list of things you can configure:
  * `VERIFICATION_TOKEN` The verification from your Slack App config. There is no default, you must set this.
- * `MONGODB` The MongoDB URI (including username and password if applicable).  Defaults to `mongodb://localhost:27017`
+ * `SQLITE_PATH` The SQLite database path. Defaults to `data/karmabot.db`
+ * `OTEL_EXPORTER_OTLP_ENDPOINT` Optional OTLP endpoint for OpenTelemetry metrics. When unset, metrics export is disabled.
+ * `OTEL_SERVICE_NAME` The OpenTelemetry service name. Defaults to `karmabot`.
  * `SLACK_EVENTS_ENDPOINT` The base URI to accept Slack events on.  Defaults to `/slack_events`
  * `KARMA_RATE_LIMIT` Number of Karma operations per hour a user can do.  Defaults to `60`
  * `KARMA_TTL` How quickly Karma expires, in days.  Defaults to `90`

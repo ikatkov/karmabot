@@ -21,13 +21,13 @@ from karmabot.controller.badges import BadgesController
 from karmabot.metrics import log_metrics
 from flask import current_app
 from karmabot.service import slack as slack_client
-from pymongo import MongoClient
+from karmabot.storage import get_store
 
 
 class KarmaController(object):
 
     def __init__(self):
-        self.mongodb = MongoClient(current_app.config.get('MONGODB'))['karmabot']
+        self.store = get_store(current_app.config.get('SQLITE_PATH'))
         self.badges = BadgesController()
 
     def handle_event(self, eventw):
@@ -56,16 +56,8 @@ class KarmaController(object):
         return
 
     def ratelimit_count(self, workspace_id, gifter):
-        collection = self.mongodb[workspace_id]
         d = datetime.datetime.utcnow() + datetime.timedelta(hours=-1)
-        count = collection.count_documents(
-            {
-                "$and": [
-                    {"date": {"$gt": d}},
-                    {"gifter": {"$eq": gifter}}
-                ]
-            })
-        return count
+        return self.store.count_recent_gifts(workspace_id, gifter, d)
 
     def handle_command(self, command):
         current_app.logger.info(command['text'])
@@ -149,16 +141,7 @@ class KarmaController(object):
     def store_karma(self, ktype, subject, quantity, gifter, workspace_id):
         now = datetime.datetime.utcnow()
         expires = now + datetime.timedelta(days=settings.KARMA_TTL)
-        data = {
-            'type': ktype,
-            'subject': subject,
-            'quantity': quantity,
-            'gifter': gifter,
-            'date': now,
-            'expires': expires
-        }
-        collection = self.mongodb[workspace_id]
-        collection.insert_one(data)
+        self.store.store_karma(workspace_id, ktype, subject, quantity, gifter, now, expires)
 
     def get_karma(self, workspace_id, ktype, subject):
         if ktype == "thing" and subject == u'\u03c0':
@@ -166,93 +149,19 @@ class KarmaController(object):
         if ktype == "thing" and subject == u'\u2107':
             return "2.71828182845904523536028747135266249775724709369995957"
 
-        collection = self.mongodb[workspace_id]
-        pipeline = [
-            {
-                "$match": {
-                    "subject": subject,
-                    "type": ktype
-                }
-            },
-            {
-                "$group": {
-                    "_id": "subject",
-                    "total": {
-                        "$sum": "$quantity"
-                    }
-                }
-            }
-        ]
-
-        results = collection.aggregate(pipeline)
-        # TODO: how do we handle errors here?
-        l_results = list(results)
-        if len(l_results) == 0:
-            return 0
-        return l_results[0]['total']
+        return self.store.get_karma(workspace_id, ktype, subject)
 
     def get_type_karma(self, workspace_id, ktype):
-        collection = self.mongodb[workspace_id]
-        pipeline = [
-            {
-                "$match": {
-                    "type": ktype
-                }
-            },
-            {
-                "$group": {
-                    "_id": ktype,
-                    "total": {
-                        "$sum": "$quantity"
-                    }
-                }
-            }
-        ]
-
-        results = collection.aggregate(pipeline)
-        # TODO: how do we handle errors here?
-        l_results = list(results)
-        if len(l_results) == 0:
-            return 0
-        return l_results[0]['total']
+        return self.store.get_type_karma(workspace_id, ktype)
 
     def get_all_karma(self, workspace_id):
-        collection = self.mongodb[workspace_id]
-        pipeline = [
-            {
-                "$group": {
-                    "_id": "all",
-                    "total": {
-                        "$sum": "$quantity"
-                    }
-                }
-            }
-        ]
-
-        results = collection.aggregate(pipeline)
-        # TODO: how do we handle errors here?
-        l_results = list(results)
-        if len(l_results) == 0:
-            return 0
-        return l_results[0]['total']
+        return self.store.get_all_karma(workspace_id)
 
     def get_karma_gifter_count(self, workspace_id):
-        collection = self.mongodb[workspace_id]
-        return len(collection.distinct("gifter"))
+        return self.store.get_karma_gifter_count(workspace_id)
 
     def get_subject_count(self, workspace_id, ktype):
-        collection = self.mongodb[workspace_id]
-        pipeline = [
-            {"$group": {"_id": {"type": "$type", "subject": "$subject"}}},
-            {"$count": "total_subjects"}
-        ]
-
-        if ktype:
-            pipeline.insert(0, {"$match": {"type": ktype}})
-
-        results = collection.aggregate(pipeline)
-        r = results.next()
-        return r['total_subjects']
+        return self.store.get_subject_count(workspace_id, ktype)
 
     @staticmethod
     def karma_error_reply(eventw, message):
@@ -479,7 +388,6 @@ class KarmaController(object):
 
     def cmd_karma_subject_stats(self, command, subject_display):
         workspace_id = command['team_id']
-        collection = self.mongodb[workspace_id]
 
         ktype = "thing"
         subject = subject_display
@@ -534,7 +442,7 @@ class KarmaController(object):
 
         current_app.logger.info(f"show karma stats for subject: {subject} type: {ktype}")
 
-        karma_ops = collection.count_documents({"subject": subject, "type": ktype})
+        karma_ops = self.store.count_karma_operations(workspace_id, ktype, subject)
 
         gifters = self.get_gifters(workspace_id, ktype, subject)
         karma = self.get_karma(workspace_id, ktype, subject)
@@ -613,79 +521,32 @@ class KarmaController(object):
         return
 
     def get_top_karma(self, workspace_id, gifter=None, ktype=None, direction=-1, limit=10):
-        collection = self.mongodb[workspace_id]
-
-        pipeline = [
-            {"$group": {"_id": {"type": "$type", "subject": "$subject"}, "total": {"$sum": "$quantity"}}},
-            {"$sort": {"total": direction}},
-            {"$limit": limit}
-        ]
-
-        if not gifter and not ktype:
-            pipeline.insert(0, {"$match": {"$or": [
-                {"type": "thing"},
-                {"type": "user"},
-                {"type": "channel"},
-                {"type": "group"}
-            ]}})
-        if gifter and not ktype:
-            pipeline.insert(0, {"$match": {"gifter": gifter, "$or": [
-                {"type": "thing"},
-                {"type": "user"},
-                {"type": "channel"},
-                {"type": "group"}
-            ]}})
-        elif ktype and not gifter:
-            pipeline.insert(0, {"$match": {"type": ktype}})
-        elif ktype and gifter:
-            pipeline.insert(0, {"$match": {"gifter": gifter, "type": ktype}})
-
-        r = collection.aggregate(pipeline)
-
         msg = ""
-        for entry in r:
-            if entry["_id"]["type"] == "user":
-                msg = f'{msg}\n{entry["total"]}  <@{entry["_id"]["subject"]}> (user)'
-            elif entry["_id"]["type"] == "channel":
-                msg = f'{msg}\n{entry["total"]}  <#{entry["_id"]["subject"]}> (channel)'
-            elif entry["_id"]["type"] == "thing":
-                msg = f'{msg}\n{entry["total"]}  {entry["_id"]["subject"]} (thing)'
-            elif entry["_id"]["type"] == "group":
-                msg = f'{msg}\n{entry["total"]}  <!subteam^{entry["_id"]["subject"]}> (group)'
+        for entry in self.store.get_top_karma(workspace_id, gifter=gifter, subject_type=ktype, direction=direction, limit=limit):
+            if entry["subject_type"] == "user":
+                msg = f'{msg}\n{entry["total"]}  <@{entry["subject"]}> (user)'
+            elif entry["subject_type"] == "channel":
+                msg = f'{msg}\n{entry["total"]}  <#{entry["subject"]}> (channel)'
+            elif entry["subject_type"] == "thing":
+                msg = f'{msg}\n{entry["total"]}  {entry["subject"]} (thing)'
+            elif entry["subject_type"] == "group":
+                msg = f'{msg}\n{entry["total"]}  <!subteam^{entry["subject"]}> (group)'
             else:
-                msg = f'{msg}\n{entry["total"]}  {entry["_id"]["subject"]} (?)'
+                msg = f'{msg}\n{entry["total"]}  {entry["subject"]} (?)'
 
         return msg
 
     def get_gifters(self, workspace_id, ktype, subject):
-        collection = self.mongodb[workspace_id]
-        gifters = []
-        pipeline = [
-            {"$match": {"type": ktype, "subject": subject}},
-            {"$group": {"_id": "$gifter", "total": {"$sum": "$quantity"}}},
-            {"$sort": {"total": -1}}
-        ]
-        results = collection.aggregate(pipeline)
-
-        for result in results:
-            gifters.append((result['_id'], result['total']))
-
-        return gifters
+        return self.store.get_gifters(workspace_id, ktype, subject)
 
     def cmd_karma_stats(self, command):
         workspace_id = command['team_id']
-        collection = self.mongodb[workspace_id]
 
-        total_count = collection.count_documents({"$or": [
-            {"type": "thing"},
-            {"type": "user"},
-            {"type": "channel"},
-            {"type": "group"}
-        ]})
-        thing_count = collection.count_documents({"type": "thing"})
-        user_count = collection.count_documents({"type": "user"})
-        channel_count = collection.count_documents({"type": "channel"})
-        group_count = collection.count_documents({"type": "group"})
+        total_count = self.store.count_karma_operations(workspace_id)
+        thing_count = self.store.count_karma_operations(workspace_id, "thing")
+        user_count = self.store.count_karma_operations(workspace_id, "user")
+        channel_count = self.store.count_karma_operations(workspace_id, "channel")
+        group_count = self.store.count_karma_operations(workspace_id, "group")
 
         total_karma = self.get_all_karma(workspace_id)
         thing_karma = self.get_type_karma(workspace_id, "thing")
@@ -845,18 +706,9 @@ class KarmaController(object):
         channel_members = slack_client.get_all_channel_members(command['team_id'], command['channel_id'])
         current_app.logger.debug(f"channel_members: {channel_members}")
 
-        collection = self.mongodb[command['team_id']]
-        q = [{"subject": uid} for uid in channel_members]
-        pipeline = [
-            {"$match": {"$or": q}},
-            {"$group": {"_id": {"type": "$type", "subject": "$subject"}, "total": {"$sum": "$quantity"}}},
-            {"$sort": {"total": -1}},
-            {"$limit": 10}
-        ]
-        results = collection.aggregate(pipeline)
         top_members = []
-        for u in results:
-            top_members.append(f"{u['total']} <@{u['_id']['subject']}>")
+        for u in self.store.get_top_karma(command['team_id'], subject_type="user", limit=10, subjects=channel_members):
+            top_members.append(f"{u['total']} <@{u['subject']}>")
         message = {
             'response_type': 'ephemeral',
             'attachments': [
