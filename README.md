@@ -82,9 +82,9 @@ uv run radon cc karmabot -a -nc
 
 ### CI and Docker Publishing
 
-GitHub Actions runs Ruff, pytest, Radon, and a Docker build on pull requests and pushes to `master`.
+GitHub Actions runs Ruff, pytest, Radon, and a Docker build on every push and pull request.
 
-Docker Hub publishing runs when a GitHub release is published, or when the `Publish Docker image` workflow is started manually. Configure these repository secrets first:
+Docker Hub publishing is manual. Start the `Publish Docker image` workflow, choose the image tag to publish, and optionally publish `latest`. Configure these repository secrets first:
 
 * `DOCKERHUB_USERNAME` Docker Hub username or organization.
 * `DOCKERHUB_TOKEN` Docker Hub access token.
