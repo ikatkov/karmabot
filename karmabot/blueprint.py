@@ -17,14 +17,12 @@
 The Blueprint module for Karma
 """
 
-import json
 import time
 import re
 
 from flask import abort, current_app, g, jsonify, request, Blueprint
 
 from karmabot.controller.karma import KarmaController
-from karmabot.controller.badges import BadgesController
 from karmabot import executor
 from karmabot.metrics import timeit, log_metrics
 
@@ -41,15 +39,6 @@ def get_karma_controller():
     if 'karma_controller' not in g:
         g.karma_controller = KarmaController()
     return g.karma_controller
-
-
-def get_badges_controller():
-    """
-            Get the controller from the global state, or instansiate it if needed.
-        """
-    if 'badges_controller' not in g:
-        g.badges_controller = BadgesController()
-    return g.badges_controller
 
 
 @health.route("/", methods=["GET"])
@@ -122,9 +111,6 @@ def slack_command():
     command = request.form.to_dict()
     command["rec_time"] = time.time()
 
-    if 'payload' in command:
-        command = json.loads(command['payload'])
-
     if 'token' not in command:
         current_app.logger.error(
             "There is no verification token, discarding command")
@@ -139,57 +125,8 @@ def slack_command():
             karma_controller = get_karma_controller()
             executor.submit(karma_controller.handle_command, command)
 
-        elif command['command'] == '/badge':
-            badges_controller = get_badges_controller()
-            executor.submit(badges_controller.handle_command, command)
-
         else:
             current_app.logger.info(f"Ignoring unknown command {command['command']}")
-
-        return '', 200
-
-
-@timeit('karmabot_interactive_requests')
-@slack.route('/karmabot_dev-v1_interactions', methods=['POST'])
-@slack.route('/karmabot-v1_interactions', methods=['POST'])
-def slack_interaction():
-    """
-        Handle incoming Slack interactions
-    """
-    interaction = None
-    current_app.logger.error(request.form)
-    if 'payload' in request.form:
-        interaction = json.loads(request.form['payload'])
-        interaction["rec_time"] = time.time()
-    else:
-        current_app.logger.error("Missing payload, ignored interaction")
-        abort(401)
-
-    if 'token' not in interaction:
-        current_app.logger.error(
-            "There is no verification token, discarding interaction")
-        abort(401)
-    if interaction['token'] != current_app.config.get('VERIFICATION_TOKEN'):
-        current_app.logger.error("Wrong verification token, discarding command")
-        abort(403)
-    else:
-        badges_controller = get_badges_controller()
-        if interaction['type'] == "dialog_submission":
-            if interaction['callback_id'] == 'karma-badge-create-0':
-                executor.submit(badges_controller.cmd_badge_create_complete, interaction)
-            elif interaction['callback_id'].startswith('karma-badge-update-'):
-                executor.submit(badges_controller.cmd_badge_update_complete, interaction)
-            else:
-                current_app.logger.warning(f"Unknown callback_id {interaction['callback_id']}")
-        elif interaction['type'] == "interactive_message":
-            if interaction['callback_id'] == 'karma-badge-delete-0':
-                executor.submit(badges_controller.cmd_badge_delete_complete, interaction)
-            else:
-                current_app.logger.warning(f"Unknown callback_id {interaction['callback_id']}")
-        else:
-            current_app.logger.warning(f"Unknown interaction type: {interaction['type']}")
-
-        log_metrics('karmabot_interactions_passed', None, 'count', 1)
 
         return '', 200
 

@@ -11,7 +11,6 @@ This is an implementation of Karma in Python that should be fairly robust to han
 * Top and Bottom list for all, things, users, channels
 * Karma expiration
 * General Karma statistics
-* Badges
 
 
 ## What is Karma?
@@ -19,18 +18,12 @@ This is an implementation of Karma in Python that should be fairly robust to han
 Karma is a quazi-reputation system.  You may have used it in other Chat systems.  Simply put, you can add a `++` or `--` to the end of subject to add or remove karma.
 Anyone (except bots) can give Karma.  Karma isn't a perfect system — it can be gamed, but it can be a fun way to show your gratitude when someone helps you out.
 
-## What are badges?
-
-Badges are bit of an experiment right now.  When a user's karma is shown (either from normal karma operations or a show command) any badges they have will be displayed with the karma score.  Badges can only be created by the Slack admins, and only badge owners can give them to a user.  A user may choose to remove any of their own badges, too.
-
-The idea is badges should be special, unique, and convey some meaning. For now, the intent is to have badges be limited to groups of 20 or less people, and have any one person have no more than 5 badges (ideally between 0 and 2 badges). No limits are enforced (yet) as this is an experiment. If you have an idea for how badges could be useful, please let us know!
-
 ## Architecture
 
 This implementation uses Flask and SQLite.
 
 
-The Flask web service listens for the events from Slack and executes them in a separate thread using `flask-executor`. SQLite is used to store the Karma operations and badges.
+The Flask web service listens for the events from Slack and executes them in a separate thread using `flask-executor`. SQLite is used to store the Karma operations.
 
 ### SQLite
 
@@ -62,8 +55,6 @@ Karmabot emits metrics through OpenTelemetry when `OTEL_EXPORTER_OTLP_ENDPOINT` 
 * Create the app entry in `api.slack.com/apps`.
   * Create `/karma` command pointed to the proper HTTP endpoint for commands
     * Make sure to select "Escape channels, users, and links"
-  * Create `/badge` command pointed to the proper HTTP endpoint for commands
-    * Make sure to select "Escape channels, users, and links"
 * Start the Karmabot instance somewhere.  Its designed to be a Docker service, and configuration is handled via environment variables. 
 * Update the app entry in `api.slack.com/apps`:
  * Create event subscriptions and point at the proper HTTP endpoint for events. Subscribe to Bot Events:
@@ -76,7 +67,6 @@ Karmabot emits metrics through OpenTelemetry when `OTEL_EXPORTER_OTLP_ENDPOINT` 
     * `channels:write`
     * `chat:write:bot`
     * `im:write`
-    * `usergroups:read`
 * Invite the Karma bot into channels you wish to track Karma
 
 ### Development

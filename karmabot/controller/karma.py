@@ -17,7 +17,6 @@ import time
 import re
 from karmabot import regex
 from karmabot import settings
-from karmabot.controller.badges import BadgesController
 from karmabot.metrics import log_metrics
 from flask import current_app
 from karmabot.service import slack as slack_client
@@ -28,7 +27,6 @@ class KarmaController(object):
 
     def __init__(self):
         self.store = get_store(current_app.config.get('SQLITE_PATH'))
-        self.badges = BadgesController()
 
     def handle_event(self, eventw):
         late = time.time() - float(eventw['rec_time'])
@@ -173,12 +171,9 @@ class KarmaController(object):
     def karma_success_reply(self, eventw, ktype, subject_id, subject_display, quantity):
         karma = self.get_karma(eventw['team_id'], ktype, subject_id)
 
-        badges = ""
-        if ktype == "user":
-            badges = "".join(self.badges.get_badges(eventw['team_id'], subject_id))
-
+        decoration = ""
         if karma == 42:
-            badges = f"{badges}:dolphin:"
+            decoration = ":dolphin:"
 
         thread_ts = None
         if 'thread_ts' in eventw['event']:
@@ -188,9 +183,9 @@ class KarmaController(object):
             'channel': eventw['event']['channel'],
             'attachments': [
                 {
-                    'fallback': f"{subject_display} has {karma} karma. ({ktype}) {badges}",
+                    'fallback': f"{subject_display} has {karma} karma. ({ktype}) {decoration}",
                     'color': settings.KARMA_COLOR,
-                    "text": f"{subject_display} has {karma} karma. ({ktype}) {badges}",
+                    "text": f"{subject_display} has {karma} karma. ({ktype}) {decoration}",
                     "footer": f"<@{eventw['event']['user']}> gave {quantity} karma to the {ktype} {subject_display}"
                 }
             ],
@@ -337,7 +332,7 @@ class KarmaController(object):
         subject_disp = subject
         ktype = "Thing"
         karma = 0
-        badges = ""
+        decoration = ""
 
         f = True
 
@@ -348,7 +343,6 @@ class KarmaController(object):
             karma = self.get_karma(command['team_id'], "user", user_id)
             ktype = "User"
             f = False
-            badges = "".join(self.badges.get_badges(command['team_id'], user_id))
 
         match = regex.channel_re.match(subject)
         if f and match:
@@ -366,7 +360,7 @@ class KarmaController(object):
             karma = self.get_karma(command['team_id'], "thing", subject)
 
         if karma == 42:
-            badges = f"{badges}:dolphin:"
+            decoration = ":dolphin:"
 
         thread_ts = None
         if 'event' in command and 'thread_ts' in command['event']:
@@ -375,9 +369,9 @@ class KarmaController(object):
         message = {
             'attachments': [
                 {
-                    'fallback': f"{subject_disp} has {karma} karma. ({ktype}) {badges}",
+                    'fallback': f"{subject_disp} has {karma} karma. ({ktype}) {decoration}",
                     'color': settings.KARMA_COLOR,
-                    "text": f"{subject_disp} has {karma} karma. ({ktype}) {badges}"
+                    "text": f"{subject_disp} has {karma} karma. ({ktype}) {decoration}"
                 }
             ],
             'thread_ts': thread_ts
@@ -462,15 +456,6 @@ class KarmaController(object):
                 'short': False
             }
 
-        badges_msg = None
-        if ktype == "user":
-            badges = self.badges.get_badges(workspace_id, subject)
-            gifts_msg = {
-                'title': 'Badges',
-                'value': " ".join(badges),
-                'short': False
-            }
-
         message = {
             'response_type': 'ephemeral',
             'attachments': [
@@ -510,7 +495,6 @@ class KarmaController(object):
                             "short": True
                         },
                         gifts_msg,
-                        badges_msg
 
                     ]
                 }

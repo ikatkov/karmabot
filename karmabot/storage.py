@@ -25,12 +25,6 @@ def _to_db_datetime(value):
     return value.replace(microsecond=0).isoformat()
 
 
-def _from_db_datetime(value):
-    if value is None:
-        return None
-    return datetime.datetime.fromisoformat(value)
-
-
 class KarmaStore(object):
     def __init__(self, path):
         self.path = Path(path)
@@ -59,35 +53,12 @@ class KarmaStore(object):
                     expires_at TEXT NOT NULL
                 );
 
-                CREATE TABLE IF NOT EXISTS badges (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    workspace_id TEXT NOT NULL,
-                    subject TEXT NOT NULL,
-                    badge TEXT NOT NULL,
-                    gifter TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS badge_info (
-                    workspace_id TEXT NOT NULL,
-                    badge TEXT NOT NULL,
-                    owner TEXT NOT NULL,
-                    owner_display TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    PRIMARY KEY (workspace_id, badge)
-                );
-
                 CREATE INDEX IF NOT EXISTS idx_karma_subject
                     ON karma_events (workspace_id, subject_type, subject);
                 CREATE INDEX IF NOT EXISTS idx_karma_gifter_created
                     ON karma_events (workspace_id, gifter, created_at);
                 CREATE INDEX IF NOT EXISTS idx_karma_expires
                     ON karma_events (workspace_id, expires_at);
-                CREATE INDEX IF NOT EXISTS idx_badges_subject
-                    ON badges (workspace_id, subject);
-                CREATE INDEX IF NOT EXISTS idx_badges_badge
-                    ON badges (workspace_id, badge);
                 """
             )
 
@@ -272,130 +243,6 @@ class KarmaStore(object):
                 (workspace_id, subject_type, subject),
             ).fetchall()
             return [(row["gifter"], row["total"]) for row in rows]
-
-    def get_badges(self, workspace_id, subject):
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT badge FROM badges WHERE workspace_id = ? AND subject = ? ORDER BY created_at ASC, id ASC",
-                (workspace_id, subject),
-            ).fetchall()
-            return [row["badge"] for row in rows]
-
-    def get_badge_users(self, workspace_id, badge):
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT subject FROM badges WHERE workspace_id = ? AND badge = ? ORDER BY created_at ASC, id ASC",
-                (workspace_id, badge),
-            ).fetchall()
-            return [row["subject"] for row in rows]
-
-    def delete_badge(self, workspace_id, badge):
-        with self._connect() as conn:
-            conn.execute("DELETE FROM badges WHERE workspace_id = ? AND badge = ?", (workspace_id, badge))
-            conn.execute("DELETE FROM badge_info WHERE workspace_id = ? AND badge = ?", (workspace_id, badge))
-
-    def get_badge_info(self, workspace_id, badge):
-        with self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT badge, owner, owner_display, description, created_at
-                FROM badge_info
-                WHERE workspace_id = ? AND badge = ?
-                """,
-                (workspace_id, badge),
-            ).fetchone()
-            if not row:
-                return None
-            return {
-                "type": "badge_info",
-                "badge": row["badge"],
-                "owner": row["owner"],
-                "owner_display": row["owner_display"],
-                "description": row["description"],
-                "date": _from_db_datetime(row["created_at"]),
-            }
-
-    def store_badge(self, workspace_id, subject, gifter, badge, created_at):
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO badges (workspace_id, subject, badge, gifter, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (workspace_id, subject, badge, gifter, _to_db_datetime(created_at)),
-            )
-
-    def remove_badge(self, workspace_id, subject, badge):
-        with self._connect() as conn:
-            conn.execute(
-                "DELETE FROM badges WHERE workspace_id = ? AND subject = ? AND badge = ?",
-                (workspace_id, subject, badge),
-            )
-
-    def store_badge_info(self, workspace_id, badge, owner, owner_display, description, created_at):
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO badge_info (workspace_id, badge, owner, owner_display, description, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (workspace_id, badge, owner, owner_display, description, _to_db_datetime(created_at)),
-            )
-
-    def replace_badge_info(self, workspace_id, badge, owner, owner_display, description, created_at):
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO badge_info (workspace_id, badge, owner, owner_display, description, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(workspace_id, badge) DO UPDATE SET
-                    owner = excluded.owner,
-                    owner_display = excluded.owner_display,
-                    description = excluded.description,
-                    created_at = excluded.created_at
-                """,
-                (workspace_id, badge, owner, owner_display, description, _to_db_datetime(created_at)),
-            )
-
-    def list_badges(self, workspace_id):
-        with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT badge FROM badge_info WHERE workspace_id = ? ORDER BY badge ASC",
-                (workspace_id,),
-            ).fetchall()
-            return [row["badge"] for row in rows]
-
-    def get_top_badges(self, workspace_id, limit):
-        with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT badge, COUNT(*) AS count
-                FROM badges
-                WHERE workspace_id = ?
-                GROUP BY badge
-                ORDER BY count DESC
-                LIMIT ?
-                """,
-                (workspace_id, limit),
-            ).fetchall()
-            return [dict(row) for row in rows]
-
-    def count_badge_info(self, workspace_id):
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS total FROM badge_info WHERE workspace_id = ?",
-                (workspace_id,),
-            ).fetchone()
-            return row["total"]
-
-    def count_badges(self, workspace_id):
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS total FROM badges WHERE workspace_id = ?",
-                (workspace_id,),
-            ).fetchone()
-            return row["total"]
-
 
 _store = None
 
