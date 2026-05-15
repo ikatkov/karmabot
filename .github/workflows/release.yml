@@ -1,0 +1,66 @@
+name: Semantic Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: semantic-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Create semantic release
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'master'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Force release branch to workflow commit
+        run: git reset --hard ${{ github.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups --python 3.10
+
+      - name: Ruff
+        run: uv run ruff check karmabot tests
+
+      - name: Pytest
+        run: uv run pytest
+
+      - name: Radon
+        run: uv run radon cc karmabot -a -nc
+
+      - name: Docker build
+        run: docker build -t karmabot-release-check .
+
+      - name: Semantic version release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10.5.3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_committer_name: github-actions[bot]
+          git_committer_email: 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Release summary
+        run: |
+          if [ "${{ steps.release.outputs.released }}" = "true" ]; then
+            echo "Released ${{ steps.release.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "${{ steps.release.outputs.link }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No release was created. Add a feat, fix, perf, or breaking-change commit before releasing." >> "$GITHUB_STEP_SUMMARY"
+          fi

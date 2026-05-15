@@ -84,6 +84,8 @@ uv run radon cc karmabot -a -nc
 
 GitHub Actions runs Ruff, pytest, Radon, and a Docker build on every push and pull request.
 
+GitHub releases are manual and SemVer-based. Start the `Semantic Release` workflow from `master`; it calculates the next `vX.Y.Z` release from Conventional Commits, updates the project version, tags the release, and creates the GitHub release notes.
+
 Docker Hub publishing is manual. Start the `Publish Docker image` workflow, choose the image tag to publish, and optionally publish `latest`. Configure these repository secrets first:
 
 * `DOCKERHUB_USERNAME` Docker Hub username or organization.
