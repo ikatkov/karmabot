@@ -1,13 +1,14 @@
 FROM python:3.10
-RUN pip3 install gunicorn
+COPY --from=ghcr.io/astral-sh/uv:0.9.24 /uv /uvx /bin/
 
-COPY requirements.txt setup.py /app/
 WORKDIR /app
-RUN pip3 install -r requirements.txt
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
+COPY pyproject.toml uv.lock README.md LICENSE /app/
+RUN uv sync --frozen --no-dev --no-install-project
 COPY karmabot /app/karmabot
-RUN pip3 install .
+COPY start.sh /app/main
+RUN uv sync --frozen --no-dev && chmod +x /app/main
 
-ADD start.sh /app/main
-
-ENTRYPOINT /app/main
+ENTRYPOINT ["/app/main"]

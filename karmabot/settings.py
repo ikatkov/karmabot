@@ -75,8 +75,6 @@ _TTL = os.environ.get('VAULT_CACHE_TTL', 300)  # Measured in seconds
 
 
 def _vault_get_access_token(workspace):
-    global _access_token_cache, _TTL
-
     current_app.logger.debug(f"DEBUG: Got request for {workspace} workspace (vault)")
     n = datetime.now().timestamp()
     (token, ts) = _access_token_cache.get(workspace, (None, 0))
@@ -94,8 +92,6 @@ def _vault_get_access_token(workspace):
 
 
 def _vault_get_bot_token(workspace):
-    global _vault, _bot_token_cache, _TTL, vault, vault_base_path
-
     current_app.logger.debug(f"DEBUG: Got request for {workspace} workspace (vault)")
     n = datetime.now().timestamp()
     (token, ts) = _bot_token_cache.get(workspace, (None, 0))

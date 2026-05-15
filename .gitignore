@@ -3,4 +3,5 @@
 kubernetes/secrets.yml
 .idea/
 venv
+.venv
 .env

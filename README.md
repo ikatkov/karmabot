@@ -80,6 +80,16 @@ db.WKSPCID.createIndex( { "expires": 1 }, { expireAfterSeconds: 0 } )
     * `usergroups:read`
 * Invite the Karma bot into channels you wish to track Karma
 
+### Development
+
+This project uses `uv` for dependency management.
+
+```
+uv sync
+uv run flake8 karmabot --count --select=E9,F63,F7,F82 --show-source --statistics
+uv run radon cc karmabot -a -nc
+```
+
 ### Environment Variables
 
 As mentioned, configuration is handled via environment variables.  Here is the list of things you can configure:

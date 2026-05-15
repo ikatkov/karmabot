@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "karmabot"
+version = "1.0.3"
+description = "A Slack bot to track Karma points"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+    { name = "Jay Kline", email = "jay.kline@target.com" }
+]
+urls = { Homepage = "https://github.com/target/karmabot" }
+dependencies = [
+    "Flask==2.2.2",
+    "Werkzeug==2.2.3",
+    "urlfetch==1.2.2",
+    "pymongo==3.13.0",
+    "influxdb==5.3.1",
+    "python-json-logger==2.0.4",
+    "flask-executor==1.0.0",
+    "hvac==1.0.2",
+    "gunicorn==23.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0,<8",
+    "radon>=6.0.1,<7",
+]
+
+[tool.setuptools.packages.find]
+include = ["karmabot*"]
