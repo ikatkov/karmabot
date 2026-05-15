@@ -75,9 +75,21 @@ This project uses `uv` for dependency management.
 
 ```
 uv sync
-uv run ruff check karmabot
+uv run ruff check karmabot tests
+uv run pytest
 uv run radon cc karmabot -a -nc
 ```
+
+### CI and Docker Publishing
+
+GitHub Actions runs Ruff, pytest, Radon, and a Docker build on pull requests and pushes to `master`.
+
+Docker Hub publishing runs when a GitHub release is published, or when the `Publish Docker image` workflow is started manually. Configure these repository secrets first:
+
+* `DOCKERHUB_USERNAME` Docker Hub username or organization.
+* `DOCKERHUB_TOKEN` Docker Hub access token.
+
+Images are published as `${DOCKERHUB_USERNAME}/karmabot`.
 
 ### Environment Variables
 
